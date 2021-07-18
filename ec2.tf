@@ -27,11 +27,10 @@ resource "aws_security_group" "allow_ssh" {
   }
 
   egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-    ipv6_cidr_blocks = ["::/0"]
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = {
@@ -40,7 +39,9 @@ resource "aws_security_group" "allow_ssh" {
 }
 
 resource "aws_vpc" "my_vpc" {
-  cidr_block = "10.0.0.0/16"
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_hostnames = true
+  enable_dns_support   = true
 
   tags = {
     Name = "tf-example"
@@ -48,65 +49,52 @@ resource "aws_vpc" "my_vpc" {
 }
 
 resource "aws_subnet" "my_subnet" {
-  vpc_id            = aws_vpc.my_vpc.id
-  cidr_block        = "10.0.1.0/24"
-  availability_zone = "us-east-2a"
+  vpc_id                  = aws_vpc.my_vpc.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = "us-east-2a"
+  map_public_ip_on_launch = true
 
   tags = {
     Name = "tf-example"
   }
 }
 
-resource "aws_network_interface" "foo" {
-  subnet_id   = aws_subnet.my_subnet.id
-  private_ips = ["10.0.1.17"]
-
+resource "aws_route_table" "rt" {
+  vpc_id = aws_vpc.my_vpc.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.gw.id
+  }
   tags = {
-    Name = "primary_network_interface"
+    Name = "test-env-route-table"
   }
 }
 
-data "aws_ami" "ubuntu" {
-  most_recent = true
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
-  }
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-  owners = ["099720109477"] # Canonical
+resource "aws_route_table_association" "subnet-association" {
+  subnet_id      = aws_subnet.my_subnet.id
+  route_table_id = aws_route_table.rt.id
+}
+
+resource "aws_eip" "eip" {
+  instance = aws_instance.foo.id
+  vpc      = true
 }
 
 resource "aws_instance" "foo" {
-  ami                  = data.aws_ami.ubuntu.id
+  ami                  = "ami-0233c2d874b811deb"
   instance_type        = "t2.micro"
   iam_instance_profile = aws_iam_instance_profile.test_profile.name
   key_name             = aws_key_pair.deployer.key_name
   subnet_id            = aws_subnet.my_subnet.id
   security_groups      = [aws_security_group.allow_ssh.id]
-  network_interface {
-    network_interface_id = aws_network_interface.foo.id
-    device_index         = 0
-  }
 
   credit_specification {
     cpu_credits = "unlimited"
   }
 }
 
-resource "aws_eip_association" "eip_assoc" {
-  instance_id   = aws_instance.foo.id
-  allocation_id = aws_eip.example.id
-}
-
-resource "aws_eip" "example" {
-  vpc = true
-}
-
-output "public_ip" {
-  value = aws_eip.example.*
+output "eip" {
+  value = aws_eip.eip.*
 }
 
 output "ec2" {
