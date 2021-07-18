@@ -8,14 +8,12 @@ variable "s3_id" {
 
 }
 
-
 resource "random_pet" "s3" {
   keepers = {
-    # Generate a new pet name each time we switch to a new AMI id
+    # Generate a new pet name each time we switch to a new bucket
     s3 = var.s3_id
   }
 }
-
 
 resource "aws_s3_bucket" "b" {
   bucket = random_pet.s3.id
